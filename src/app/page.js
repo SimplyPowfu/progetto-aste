@@ -221,7 +221,17 @@ function AstaCard({ asta, user, isAdmin, currentFilter }) {
       )}
       
       <div className="h-48 bg-gray-200 flex items-center justify-center">
-        <span className="text-gray-500">(Immagine Asta)</span>
+        {asta.imageUrl ? (
+          <img 
+            src={asta.imageUrl} 
+            alt={asta.titolo}
+            className="w-full h-full object-cover" // object-cover è la chiave
+          />
+        ) : (
+          <div className="h-full bg-gray-200 flex items-center justify-center">
+            <span className="text-gray-500">(Senza Immagine)</span>
+          </div>
+        )}
       </div>
       
       <div className="p-4 flex-grow">
