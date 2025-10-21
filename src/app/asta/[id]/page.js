@@ -15,7 +15,8 @@ import {
   updateDoc, 
   getDocs,
   query,
-  orderBy
+  orderBy,
+  deleteDoc
 } from 'firebase/firestore';
 import Link from 'next/link';
 
@@ -30,6 +31,7 @@ export default function AstaPage({ params }) {
   const [puntata, setPuntata] = useState(0);
   const [puntataError, setPuntataError] = useState(null);
   const [puntataLoading, setPuntataLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isAdmin = user && user.uid === process.env.NEXT_PUBLIC_ADMIN_USER_ID;
 
@@ -97,6 +99,42 @@ export default function AstaPage({ params }) {
     }
   };
 
+  const handleDelete = async () => {
+    if (!isAdmin || !asta) return;
+    if (!confirm("Sei SICURO di voler eliminare questa asta? L'azione è DEFINITIVA e cancellerà anche l'immagine.")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      // 1. Cancella l'immagine da Vercel Blob
+      if (asta.imagePath) {
+        const response = await fetch('/api/delete-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: asta.imagePath }),
+        });
+
+        if (!response.ok) {
+          // Se fallisce qui, non procediamo per non orfanizzare l'immagine
+          throw new Error('Errore durante la cancellazione dell\'immagine su Vercel.');
+        }
+      }
+
+      // 2. Cancella il documento da Firestore
+      const astaRef = doc(db, 'auctions', astaId);
+      await deleteDoc(astaRef);
+
+      // 3. Torna alla homepage
+      router.push('/');
+
+    } catch (err) {
+      console.error("Errore eliminazione asta:", err);
+      alert(`Si è verificato un errore: ${err.message}`);
+      setIsDeleting(false);
+    }
+  };
+
   // Logica Stop Asta (Admin)
   const handleStopAsta = async () => {
     if (!isAdmin || !asta) return;
@@ -156,6 +194,7 @@ export default function AstaPage({ params }) {
       {isAdmin && (
         <div className="bg-blue-100 border border-blue-400 text-blue-800 p-4 rounded-lg shadow">
           <h3 className="text-xl font-bold mb-2">Pannello Amministrazione</h3>
+
           {asta.stato === 'attiva' && (
             <button
               onClick={handleStopAsta}
@@ -164,9 +203,24 @@ export default function AstaPage({ params }) {
               Ferma Asta Ora
             </button>
           )}
+
           {asta.stato === 'chiusa' && (
             <PannelloRisultatiAdmin asta={asta} vincitoreEmail={asta.vincitoreEmail} />
           )}
+
+          {/* --- NUOVO PULSANTE ELIMINA (sempre visibile) --- */}
+          <div className="border-t border-blue-300 mt-4 pt-4">
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-gray-700 text-white font-bold rounded 
+                        hover:bg-gray-900 disabled:bg-gray-400"
+            >
+              {isDeleting ? 'Eliminazione in corso...' : 'Elimina Asta Definitivamente'}
+            </button>
+            <p className="text-xs mt-2">Questa azione cancellerà l'asta e la sua immagine. Non è reversibile.</p>
+          </div>
+          {/* --- FINE BLOCCO --- */}
         </div>
       )}
       

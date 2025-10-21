@@ -6,36 +6,28 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { v4 as uuidv4 } from 'uuid'; // Per i nomi unici dei file
+import { v4 as uuidv4 } from 'uuid'; 
 
 export default function CreaAstaPage() {
-  // --- 1. STATO DEL FORM ---
   const [titolo, setTitolo] = useState('');
   const [descrizione, setDescrizione] = useState('');
   const [prezzoPartenza, setPrezzoPartenza] = useState(0);
-  const [immagine, setImmagine] = useState(null); // Stato per il file immagine
+  const [immagine, setImmagine] = useState(null); 
   const [error, setError] = useState(null);
   const [loadingForm, setLoadingForm] = useState(false);
 
-  // --- 2. CONTROLLO AUTENTICAZIONE ---
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-
-  // Controlliamo se l'utente loggato è l'admin
   const isAdmin = user && user.uid === process.env.NEXT_PUBLIC_ADMIN_USER_ID;
 
-  // --- 3. LOGICA DI INVIO FORM (AGGIORNATA PER VERCEL BLOB) ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     setLoadingForm(true);
 
-    // Controlli di validazione (immagine e prezzo)
-    if (!immagine) {
-      setError('Devi caricare un\'immagine per l\'asta.');
-      setLoadingForm(false);
-      return;
-    }
+    // --- MODIFICA: Il controllo sull'immagine è stato rimosso ---
+    // Non è più obbligatoria
+
     if (prezzoPartenza <= 0) {
       setError('Il prezzo di partenza deve essere maggiore di 0');
       setLoadingForm(false);
@@ -43,33 +35,33 @@ export default function CreaAstaPage() {
     }
 
     try {
-      // --- Logica di Upload su Vercel Blob ---
-      
-      // 1. Diamo un nome unico al file
-      const uniqueFileName = `${uuidv4()}-${immagine.name}`;
+      let imageUrl = null; // Default a null
+      let imagePath = null; // Default a null
 
-      // 2. Chiamiamo la nostra API Route (/api/upload)
-      // Il nome del file viene passato come parametro URL
-      const response = await fetch(
-        `/api/upload?filename=${encodeURIComponent(uniqueFileName)}`, 
-        {
-          method: 'POST',
-          body: immagine, // Invia il file grezzo nel body
+      // --- MODIFICA: Esegui l'upload SOLO se l'immagine è stata fornita ---
+      if (immagine) {
+        const uniqueFileName = `${uuidv4()}-${immagine.name}`;
+
+        const response = await fetch(
+          `/api/upload?filename=${encodeURIComponent(uniqueFileName)}`, 
+          {
+            method: 'POST',
+            body: immagine, 
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Fallimento chiamata API upload');
         }
-      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Fallimento chiamata API upload');
+        const newBlob = await response.json();
+        imageUrl = newBlob.url; // Imposta l'URL solo se l'upload è avvenuto
+        imagePath = newBlob.pathname; 
       }
+      // --- Fine Blocco Modifica ---
 
-      // 3. Prendiamo l'URL dal risultato
-      const newBlob = await response.json();
-      const imageUrl = newBlob.url; // Questo è il nostro URL pubblico!
-      // --- Fine Blocco Vercel Blob ---
-
-
-      // 4. Creiamo il documento su Firestore (come prima)
+      // I campi imageUrl e imagePath saranno 'null' se non è stata caricata un'immagine
       const docRef = await addDoc(collection(db, 'auctions'), {
         titolo: titolo,
         descrizione: descrizione,
@@ -78,17 +70,16 @@ export default function CreaAstaPage() {
         creataIl: serverTimestamp(),
         creataDa: user.uid,
         stato: 'attiva', 
-        imageUrl: imageUrl, // <-- L'URL di Vercel Blob
-        imagePath: newBlob.pathname, // (utile per cancellare in futuro)
+        imageUrl: imageUrl, 
+        imagePath: imagePath, 
       });
       
       console.log('Asta creata con ID: ', docRef.id);
-      // Svuotiamo il form
       setTitolo('');
       setDescrizione('');
       setPrezzoPartenza(0);
       setImmagine(null); 
-      e.target.reset(); // Svuota l'input file
+      e.target.reset(); 
       router.push('/'); 
 
     } catch (err) {
@@ -99,7 +90,6 @@ export default function CreaAstaPage() {
     }
   };
 
-  // --- 4. GESTIONE ACCESSO PAGINA ---
   if (authLoading) {
     return <div className="text-center p-10">Caricamento...</div>;
   }
@@ -113,7 +103,6 @@ export default function CreaAstaPage() {
     );
   }
 
-  // --- 5. RENDER DEL FORM (solo se è admin) ---
   const inputStyle = "w-full p-2 border border-gray-300 rounded mt-1";
   
   return (
@@ -128,12 +117,12 @@ export default function CreaAstaPage() {
             value={titolo}
             onChange={(e) => setTitolo(e.target.value)}
             className={inputStyle}
-            required
+            required // Il titolo rimane obbligatorio
           />
         </div>
 
         <div>
-          <label htmlFor="immagine" className="font-semibold">Immagine Asta</label>
+          <label htmlFor="immagine" className="font-semibold">Immagine Asta (Opzionale)</label>
           <input
             type="file"
             id="immagine"
@@ -144,7 +133,7 @@ export default function CreaAstaPage() {
                         file:text-sm file:font-semibold
                         file:bg-blue-50 file:text-blue-700
                         hover:file:bg-blue-100"
-            required
+            // --- MODIFICA: Rimosso 'required' ---
           />
         </div>
 
@@ -156,7 +145,7 @@ export default function CreaAstaPage() {
             onChange={(e) => setDescrizione(e.target.value)}
             className={inputStyle}
             rows="4"
-            required
+            required // La descrizione rimane obbligatoria
           />
         </div>
 
@@ -169,7 +158,7 @@ export default function CreaAstaPage() {
             onChange={(e) => setPrezzoPartenza(e.target.value)}
             className={inputStyle}
             min="1"
-            required
+            required // Il prezzo rimane obbligatorio
           />
         </div>
 
